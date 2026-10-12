@@ -22,6 +22,13 @@ curl -X POST http://localhost:8080/runs \
   -d '{"topic":"AI startups","count":3,"lang":"fr"}'
 ```
 
+Retell any run as a story, or prove the mesh survives a dead worker:
+```bash
+./scripts/replay.sh              # latest run
+./scripts/replay.sh run-abc123   # a specific run
+./scripts/chaos.sh               # kills translator mid-run, watches it heal
+```
+
 ## How the mesh talks
 One Redis, four streams, one envelope:
 
