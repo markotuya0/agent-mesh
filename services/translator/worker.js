@@ -1,17 +1,24 @@
-// Translator agent (Node.js): offline mock translation per item.
+// Translator agent (Node.js): mock dictionary by default, real API on flag.
 //
 // Listens:  mesh:translate (finder -> translator)
 // Publishes: mesh:screen   (translator -> compliance)
-// Honest mock: a tiny word dictionary plus a language tag, so the demo
-// runs with zero keys. Swap `translate()` for a real model call later.
+//
+// Modes (USE_REAL_TRANSLATOR env):
+//   "false" (default) — offline word dictionary + language tag. Zero keys,
+//                       zero cost, works on a plane.
+//   "true"            — free MyMemory translation API (no key). Any failure
+//                       (rate limit, offline) falls back to the mock for that
+//                       item, so the mesh never stalls on a network blip.
 
 const redis = require("redis");
 const fs = require("fs");
+const https = require("https");
 const path = require("path");
 
 const QUEUE_URL = process.env.QUEUE_URL || "redis://localhost:6379";
 const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || "2", 10);
 const TRAIL_DIR = process.env.TRAIL_DIR || "./trail";
+const USE_REAL = String(process.env.USE_REAL_TRANSLATOR || "false").toLowerCase() === "true";
 
 const DICT = {
   fr: { startup: "startup", raises: "lève", "seed round": "tour d'amorçage", model: "modèle", data: "données", breach: "violation", new: "nouveau", app: "appli" },
@@ -19,13 +26,41 @@ const DICT = {
   de: { startup: "Startup", raises: "sammelt", "seed round": "Seed-Runde", model: "Modell", data: "Daten", breach: "Verletzung", new: "neu", app: "App" },
 };
 
-function translate(text, lang) {
+function translateMock(text, lang) {
   const table = DICT[lang] || DICT.fr;
   let out = text;
   for (const [en, local] of Object.entries(table)) {
     out = out.replace(new RegExp(en, "gi"), local);
   }
-  return `[${lang.toUpperCase()}] ${out}`;
+  return `[${lang.toUpperCase()}-mock] ${out}`;
+}
+
+function translateReal(text, lang) {
+  const langpair = `en|${lang}`;
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 8000); // never stall the mesh
+    https.get(url, (res) => {
+      let raw = "";
+      res.on("data", (c) => { raw += c; });
+      res.on("end", () => {
+        clearTimeout(timer);
+        try {
+          const t = JSON.parse(raw).responseData?.translatedText?.trim();
+          resolve(t || null);
+        } catch {
+          resolve(null);
+        }
+      });
+    }).on("error", () => { clearTimeout(timer); resolve(null); });
+  });
+}
+
+async function translate(text, lang) {
+  if (!USE_REAL) return translateMock(text, lang);
+  const real = await translateReal(text, lang);
+  if (real) return real;
+  return translateMock(text, lang); // API hiccup -> mock fills in, run continues
 }
 
 function trail(runId, event, latencyMs = 0, detail = "") {
@@ -41,7 +76,7 @@ async function handle(client, fields) {
   const t0 = Date.now();
   const payload = JSON.parse(fields.payload);
   trail(payload.run_id || fields.run_id, "started", 0, `item=${payload.item_id}`);
-  const translated = translate(payload.text, payload.target_lang || "fr");
+  const translated = await translate(payload.text, payload.target_lang || "fr");
   await client.xAdd("mesh:screen", "*", {
     run_id: fields.run_id, stage: "screen", attempt: "0",
     payload: JSON.stringify({ ...payload, translated }),
@@ -57,7 +92,7 @@ async function main() {
   try {
     await client.xGroupCreate("mesh:translate", "translator", "0", { MKSTREAM: true });
   } catch { /* group exists */ }
-  console.log(JSON.stringify({ agent: "translator", event: "listening", stream: "mesh:translate" }));
+  console.log(JSON.stringify({ agent: "translator", event: "listening", stream: "mesh:translate", mode: USE_REAL ? "live-api-with-mock-fallback" : "mock" }));
   const consumer = `translator-${Math.random().toString(16).slice(2, 8)}`;
   for (;;) {
     const res = await client.xReadGroup("translator", consumer, { key: "mesh:translate", id: ">" }, { COUNT: 1, BLOCK: 2000 });

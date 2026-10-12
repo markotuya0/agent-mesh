@@ -49,6 +49,26 @@ Copy `.env.example` to `.env` to override defaults:
 | `TARGET_LANG` | Translation language (`fr`, `es`, `de`) | `fr` |
 | `MAX_RETRIES` | Hop retries before an item is marked degraded | `2` |
 | `TRAIL_DIR` | Where run trails land (JSONL) | `./trail` |
+| `GATEWAY_PORT` | Dashboard + API port on your machine | `8080` |
+| `USE_REAL_TRANSLATOR` | `false` = built-in dictionary (offline) · `true` = free MyMemory API with dictionary fallback | `false` |
+
+## Translator modes: mock vs live
+
+Out of the box the translator uses a small built-in word dictionary and tags output like `[FR-mock]`. It works offline and costs nothing, which is why demos and tests run on it.
+
+Flip one flag to use real translations:
+
+```bash
+USE_REAL_TRANSLATOR=true docker compose up -d translator gateway
+```
+
+What changes: the translator calls the free MyMemory API (no key needed) and returns genuine translations, so the `-mock` tag disappears. What does not change: anything else. Same streams, same envelope, same dashboard. If the API is slow, over quota or unreachable, that single item falls back to the dictionary (8 second cap per call) and the run finishes anyway. The dashboard pill always shows which mode is live: amber `Simulated translations` or green `Live translations`. Flip back anytime:
+
+```bash
+USE_REAL_TRANSLATOR=false docker compose up -d translator gateway
+```
+
+Swapping in a different provider later (DeepL, Google, an LLM) means editing one function, `translateReal()` in `services/translator/worker.js`. The queue contract stays untouched.
 
 ## Design notes
 - Pipeline pattern: strictly sequential stages with handoff contracts (planner scored single-agent for this scale; pipeline chosen deliberately to demonstrate reliable service-to-service handoffs)
@@ -57,4 +77,4 @@ Copy `.env.example` to `.env` to override defaults:
 - All intelligence is mocked offline (local feed, dictionary translator, blocklist). Swap any worker's `handle()` for a real model call without touching the envelope
 
 ## Tech
-Python workers, Node.js gateway and translator, Redis Streams, Docker Compose. Zero external calls.
+Python workers, Node.js gateway and translator, Redis Streams, Docker Compose. Offline by default, one optional free API call when you flip the flag.

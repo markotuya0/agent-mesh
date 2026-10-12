@@ -10,6 +10,8 @@ const redis = require("redis");
 const QUEUE_URL = process.env.QUEUE_URL || "redis://localhost:6379";
 const TRAIL_DIR = process.env.TRAIL_DIR || "./trail";
 const PORT = parseInt(process.env.PORT || "8080", 10);
+const TRANSLATOR_MODE =
+  String(process.env.USE_REAL_TRANSLATOR || "false").toLowerCase() === "true" ? "live" : "simulated";
 
 const runs = new Map(); // run_id -> { n, topic, count, expected, results[], created }
 let seq = 0;
@@ -64,7 +66,7 @@ details.raw summary{cursor:pointer}
 footer{color:var(--muted);font-size:.8rem;text-align:center;margin-top:2rem}
 </style></head><body>
 <header class="hero">
-<h1>AgentMesh</h1>
+<h1>AgentMesh <span class="pill" id="mode">…</span></h1>
 <p>Three agents on a factory line: one finds headlines, one translates them, one screens them. Start a run below and watch it happen.</p>
 </header>
 <form class="card" id="new">
@@ -107,6 +109,12 @@ document.getElementById('new').addEventListener('submit', async e=>{
   load();
 });
 load(); setInterval(load, 2000);
+fetch('/health').then(r=>r.json()).then(h=>{
+  const live = h.translator === 'live';
+  const el = document.getElementById('mode');
+  el.textContent = live ? 'Live translations' : 'Simulated translations';
+  el.className = 'pill ' + (live ? 'completed' : 'pending');
+});
 </script></body></html>`;
 
 function summary(runId) {  const run = runs.get(runId);
@@ -180,7 +188,7 @@ async function main() {
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
-    if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true });
+    if (req.method === "GET" && url.pathname === "/health") return send(res, 200, { ok: true, translator: TRANSLATOR_MODE });
     if (req.method === "GET" && url.pathname === "/runs") {
       return send(res, 200, { runs: [...runs.keys()].map((id) => summary(id)).filter(Boolean) });
     }

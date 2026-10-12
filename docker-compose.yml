@@ -30,6 +30,7 @@ services:
       - QUEUE_URL=redis://redis:6379
       - MAX_RETRIES=${MAX_RETRIES:-2}
       - TRAIL_DIR=/trail
+      - USE_REAL_TRANSLATOR=${USE_REAL_TRANSLATOR:-false}
     volumes:
       - ./trail:/trail
 
@@ -55,5 +56,6 @@ services:
     environment:
       - QUEUE_URL=redis://redis:6379
       - TRAIL_DIR=/trail
+      - USE_REAL_TRANSLATOR=${USE_REAL_TRANSLATOR:-false}
     volumes:
       - ./trail:/trail
