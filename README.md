@@ -15,7 +15,7 @@ docker compose up --build
 ./scripts/smoke.sh
 ```
 
-Then open `http://localhost:8080/runs` for the dashboard, or start your own run:
+Then open `http://localhost:8080` for the dashboard: start runs from the form, watch progress bars fill, click into pass/flag verdicts. Raw API still works too:
 ```bash
 curl -X POST http://localhost:8080/runs \
   -H 'Content-Type: application/json' \
