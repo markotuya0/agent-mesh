@@ -1,0 +1,7 @@
+# One term per line. A translated item containing any term is flagged.
+# The mock feed deliberately contains a breach headline so demos show a flag.
+breach
+exploit
+leak
+malware
+phishing

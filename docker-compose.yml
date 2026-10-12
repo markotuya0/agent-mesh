@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # No published port: workers reach it on the internal network,
+    # so it never collides with a host Redis.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  finder:
+    build: ./services/finder
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - QUEUE_URL=redis://redis:6379
+      - MAX_RETRIES=${MAX_RETRIES:-2}
+      - TRAIL_DIR=/trail
+    volumes:
+      - ./trail:/trail
+
+  translator:
+    build: ./services/translator
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - QUEUE_URL=redis://redis:6379
+      - MAX_RETRIES=${MAX_RETRIES:-2}
+      - TRAIL_DIR=/trail
+    volumes:
+      - ./trail:/trail
+
+  compliance:
+    build: ./services/compliance
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - QUEUE_URL=redis://redis:6379
+      - MAX_RETRIES=${MAX_RETRIES:-2}
+      - TRAIL_DIR=/trail
+    volumes:
+      - ./trail:/trail
+
+  gateway:
+    build: ./services/gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      - QUEUE_URL=redis://redis:6379
+      - TRAIL_DIR=/trail
+    volumes:
+      - ./trail:/trail

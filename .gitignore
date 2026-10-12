@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Trail runs (local only, regenerated every run)
+trail/*.jsonl
+
+# Env
+.env
+
+# Docker
+.docker/
